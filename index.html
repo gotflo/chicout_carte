@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+  <title>Chicoutimi — Carte des zones</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <aside id="sidebar" class="sidebar">
+    <header class="sidebar__header">
+      <h1>Chicoutimi</h1>
+      <p class="sidebar__subtitle">Carte interactive des zones</p>
+    </header>
+
+    <section class="panel">
+      <h2 class="panel__title">Fond de carte</h2>
+      <div class="seg" id="basemap-seg">
+        <button class="seg__btn" data-basemap="light">Clair</button>
+        <button class="seg__btn is-active" data-basemap="osm">OSM</button>
+        <button class="seg__btn" data-basemap="sat">Satellite</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel__title">Découpage</h2>
+      <div class="seg" id="zoneset-seg">
+        <button class="seg__btn is-active" data-zoneset="9">9 zones</button>
+        <button class="seg__btn" data-zoneset="12">12 zones</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel__title">Style des zones</h2>
+      <div class="control">
+        <label>Opacité du remplissage <span id="fill-opacity-val" class="muted-inline"></span></label>
+        <input type="range" id="fill-opacity" min="0" max="1" step="0.05" />
+      </div>
+      <div class="control">
+        <label>Opacité des contours</label>
+        <input type="range" id="line-opacity" min="0" max="1" step="0.05" />
+      </div>
+      <div class="control">
+        <label>Épaisseur des contours</label>
+        <input type="range" id="line-width" min="1" max="8" step="0.5" />
+      </div>
+      <label class="toggle"><input type="checkbox" id="show-labels" /><span>Afficher les numéros</span></label>
+      <button id="reset-colors" class="ghost-btn small">Réinitialiser les couleurs</button>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel__title">Couches</h2>
+      <ul class="layers">
+        <li><label class="toggle"><input type="checkbox" data-layer="zones" checked /><span>Zones</span></label></li>
+        <li><label class="toggle"><input type="checkbox" data-layer="limit" checked /><span>Limite de l'arrondissement</span></label></li>
+        <li><label class="toggle"><input type="checkbox" data-layer="quartiers" checked /><span>Quartiers</span></label></li>
+        <li><label class="toggle"><input type="checkbox" data-layer="rues" /><span>Rues nommées</span></label></li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2 class="panel__title">Aller à une zone</h2>
+      <input type="search" id="search" class="search" placeholder="Chercher un quartier ou une rue…" />
+      <div id="zone-grid" class="zone-grid"></div>
+    </section>
+
+    <footer class="sidebar__footer">
+      <button id="reset-btn" class="ghost-btn">Recentrer</button>
+      <span class="muted">Données OSM · MapLibre GL</span>
+    </footer>
+  </aside>
+
+  <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Basculer le panneau">
+    <svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+  </button>
+
+  <main id="map"></main>
+
+  <div id="results" class="results" hidden></div>
+  <aside id="detail-panel" class="detail" hidden></aside>
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

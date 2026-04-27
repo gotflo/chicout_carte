@@ -162,24 +162,8 @@ function buildLayers() {
     paint: { 'line-color': '#111', 'line-width': 2.5, 'line-dasharray': [2, 2] }
   });
 
-  map.addLayer({
-    id: 'zones-label',
-    type: 'symbol',
-    source: 'zone-labels',
-    layout: {
-      'text-field': ['to-string', ['get', '_num']],
-      'text-size': ['interpolate', ['linear'], ['zoom'], 9, 18, 14, 36],
-      'text-allow-overlap': true,
-      'text-ignore-placement': true,
-      'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular']
-    },
-    paint: {
-      'text-color': '#111',
-      'text-halo-color': '#fff',
-      'text-halo-width': 3,
-      'text-halo-blur': 0.5
-    }
-  });
+  // Zone numbers rendered as HTML markers (no font CDN required)
+  buildZoneMarkers();
 
   map.addLayer({
     id: 'rues-pt',
@@ -216,7 +200,7 @@ function buildLayers() {
       'text-size': 12,
       'text-offset': [0, 1.1],
       'text-anchor': 'top',
-      'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular']
+      'text-font': ['Noto Sans Regular']
     },
     paint: { 'text-color': '#1a1a1a', 'text-halo-color': '#fff', 'text-halo-width': 1.5 }
   });
@@ -231,13 +215,29 @@ function buildLayers() {
       'text-size': 10,
       'text-offset': [0, 0.8],
       'text-anchor': 'top',
-      'text-font': ['Open Sans Semibold', 'Arial Unicode MS Regular']
+      'text-font': ['Noto Sans Regular']
     },
     paint: { 'text-color': '#444', 'text-halo-color': '#fff', 'text-halo-width': 1.2 }
   });
 
   attachInteractions();
   applyVisibility();
+}
+
+const zoneMarkers = [];
+function buildZoneMarkers() {
+  zoneMarkers.forEach(m => m.remove());
+  zoneMarkers.length = 0;
+  if (!state.showLabels || !state.layers.zones) return;
+  const fc = state.data['z' + state.zoneset + '_labels'];
+  fc.features.forEach((f) => {
+    const el = document.createElement('div');
+    el.className = 'zone-num-marker';
+    el.textContent = f.properties._num;
+    const m = new maplibregl.Marker({ element: el, anchor: 'center' })
+      .setLngLat(f.geometry.coordinates).addTo(map);
+    zoneMarkers.push(m);
+  });
 }
 
 let hoveredZone = null;
@@ -346,7 +346,12 @@ function openZoneDetail(idx) {
     </div>
   `;
   panel.hidden = false;
-  panel.querySelector('#detail-close').onclick = () => { panel.hidden = true; };
+  const closeBtn = panel.querySelector('#detail-close');
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    panel.hidden = true;
+  });
   panel.querySelectorAll('li[data-kind]').forEach(li => {
     li.onclick = () => {
       const arr = li.dataset.kind === 'q' ? c.quartiers : c.rues;
@@ -394,7 +399,7 @@ function applyVisibility() {
   const v = (id, on) => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
   v('zones-fill', state.layers.zones);
   v('zones-line', state.layers.zones);
-  v('zones-label', state.layers.zones && state.showLabels);
+  buildZoneMarkers();
   v('limit-line', state.layers.limit);
   v('quartiers-pt', state.layers.quartiers);
   v('quartiers-label', state.layers.quartiers);
@@ -420,6 +425,7 @@ function switchZoneset(n) {
   map.getSource('zone-labels').setData(state.data[zk + '_labels']);
   refreshZonePaint();
   buildZoneGrid();
+  buildZoneMarkers();
   state.activeZone = null;
 }
 
@@ -435,11 +441,15 @@ function buildZoneGrid() {
         <span>${i + 1}</span>
       </button>
       <input type="color" class="zone-color" value="${cols[i]}" data-idx="${i}" title="Changer la couleur" />
+      <button class="zone-info" data-idx="${i}" title="Voir quartiers et rues">i</button>
     `;
     grid.appendChild(wrap);
   });
   grid.querySelectorAll('.zone-btn').forEach(b => {
     b.onclick = () => zoomToZone(+b.dataset.idx);
+  });
+  grid.querySelectorAll('.zone-info').forEach(b => {
+    b.onclick = (e) => { e.stopPropagation(); openZoneDetail(+b.dataset.idx); };
   });
   grid.querySelectorAll('.zone-color').forEach(inp => {
     inp.oninput = () => {
@@ -568,7 +578,7 @@ function setupUI() {
   }
   if (labels) {
     labels.checked = state.showLabels;
-    labels.onchange = () => { state.showLabels = labels.checked; applyVisibility(); saveStyle(); };
+    labels.onchange = () => { state.showLabels = labels.checked; buildZoneMarkers(); saveStyle(); };
   }
   const resetColors = document.getElementById('reset-colors');
   if (resetColors) {

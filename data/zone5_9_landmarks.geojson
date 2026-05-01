@@ -1,0 +1,15 @@
+{
+"type": "FeatureCollection",
+"xy_coordinate_resolution": 1e-06,
+"features": [
+{ "type": "Feature", "properties": { "_idx": 0, "_num": 1, "parent_zone": 5, "kind": "Rue", "name": "Rue Cossette" }, "geometry": { "type": "Point", "coordinates": [ -71.108081, 48.40175 ] } },
+{ "type": "Feature", "properties": { "_idx": 1, "_num": 2, "parent_zone": 5, "kind": "Quartier", "name": "Hamel-Fradette-Gobeil" }, "geometry": { "type": "Point", "coordinates": [ -71.024158, 48.421851 ] } },
+{ "type": "Feature", "properties": { "_idx": 2, "_num": 3, "parent_zone": 5, "kind": "Quartier", "name": "Chicoutimi-Nord" }, "geometry": { "type": "Point", "coordinates": [ -71.075011, 48.438205 ] } },
+{ "type": "Feature", "properties": { "_idx": 3, "_num": 4, "parent_zone": 5, "kind": "Quartier", "name": "Des Oiseaux" }, "geometry": { "type": "Point", "coordinates": [ -71.05476, 48.397685 ] } },
+{ "type": "Feature", "properties": { "_idx": 4, "_num": 5, "parent_zone": 5, "kind": "Quartier", "name": "Pulperie de Chicoutimi" }, "geometry": { "type": "Point", "coordinates": [ -71.081179, 48.422292 ] } },
+{ "type": "Feature", "properties": { "_idx": 5, "_num": 6, "parent_zone": 5, "kind": "Quartier", "name": "Le Bassin" }, "geometry": { "type": "Point", "coordinates": [ -71.075584, 48.424635 ] } },
+{ "type": "Feature", "properties": { "_idx": 6, "_num": 7, "parent_zone": 5, "kind": "Quartier", "name": "Saint-Nom-de-Jésus" }, "geometry": { "type": "Point", "coordinates": [ -71.038612, 48.429182 ] } },
+{ "type": "Feature", "properties": { "_idx": 7, "_num": 8, "parent_zone": 5, "kind": "Quartier", "name": "Des Vingt-et-Un" }, "geometry": { "type": "Point", "coordinates": [ -71.075939, 48.399794 ] } },
+{ "type": "Feature", "properties": { "_idx": 8, "_num": 9, "parent_zone": 5, "kind": "Quartier", "name": "Murdock" }, "geometry": { "type": "Point", "coordinates": [ -71.04108, 48.416551 ] } }
+]
+}

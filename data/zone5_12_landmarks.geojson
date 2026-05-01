@@ -1,0 +1,18 @@
+{
+"type": "FeatureCollection",
+"xy_coordinate_resolution": 1e-06,
+"features": [
+{ "type": "Feature", "properties": { "_idx": 0, "_num": 1, "parent_zone": 5, "kind": "Rue", "name": "Rue des Tamis" }, "geometry": { "type": "Point", "coordinates": [ -71.101264, 48.409384 ] } },
+{ "type": "Feature", "properties": { "_idx": 1, "_num": 2, "parent_zone": 5, "kind": "Quartier", "name": "Rivière-du-Moulin" }, "geometry": { "type": "Point", "coordinates": [ -71.024415, 48.427192 ] } },
+{ "type": "Feature", "properties": { "_idx": 2, "_num": 3, "parent_zone": 5, "kind": "Quartier", "name": "Chicoutimi-Nord" }, "geometry": { "type": "Point", "coordinates": [ -71.075011, 48.438205 ] } },
+{ "type": "Feature", "properties": { "_idx": 3, "_num": 4, "parent_zone": 5, "kind": "Quartier", "name": "Des Oiseaux" }, "geometry": { "type": "Point", "coordinates": [ -71.05476, 48.397685 ] } },
+{ "type": "Feature", "properties": { "_idx": 4, "_num": 5, "parent_zone": 5, "kind": "Quartier", "name": "Pulperie de Chicoutimi" }, "geometry": { "type": "Point", "coordinates": [ -71.081179, 48.422292 ] } },
+{ "type": "Feature", "properties": { "_idx": 5, "_num": 6, "parent_zone": 5, "kind": "Quartier", "name": "Murdock" }, "geometry": { "type": "Point", "coordinates": [ -71.04108, 48.416551 ] } },
+{ "type": "Feature", "properties": { "_idx": 6, "_num": 7, "parent_zone": 5, "kind": "Rue", "name": "Rue Clément" }, "geometry": { "type": "Point", "coordinates": [ -71.055672, 48.43801 ] } },
+{ "type": "Feature", "properties": { "_idx": 7, "_num": 8, "parent_zone": 5, "kind": "Quartier", "name": "Des Écrivains" }, "geometry": { "type": "Point", "coordinates": [ -71.08862, 48.398113 ] } },
+{ "type": "Feature", "properties": { "_idx": 8, "_num": 9, "parent_zone": 5, "kind": "Quartier", "name": "Notre-Dame-du-Saguenay" }, "geometry": { "type": "Point", "coordinates": [ -71.035737, 48.423329 ] } },
+{ "type": "Feature", "properties": { "_idx": 9, "_num": 10, "parent_zone": 5, "kind": "Rue", "name": "Rue du Carrousel" }, "geometry": { "type": "Point", "coordinates": [ -71.06184, 48.411765 ] } },
+{ "type": "Feature", "properties": { "_idx": 10, "_num": 11, "parent_zone": 5, "kind": "Quartier", "name": "Centre-ville de Chicoutimi" }, "geometry": { "type": "Point", "coordinates": [ -71.061909, 48.427449 ] } },
+{ "type": "Feature", "properties": { "_idx": 11, "_num": 12, "parent_zone": 5, "kind": "Rue", "name": "Rue Marquette" }, "geometry": { "type": "Point", "coordinates": [ -71.076733, 48.411647 ] } }
+]
+}

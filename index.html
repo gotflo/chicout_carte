@@ -70,8 +70,8 @@
 
     <section class="panel">
       <h2 class="panel__title">Exporter</h2>
-      <button id="exp-svg" class="ghost-btn" title="SVG haute qualité — zoomable à l'infini">Exporter en SVG</button>
-      <p class="muted-inline" style="margin-top:6px">Carte vectorielle : numéros, contours et noms restent nets quel que soit le zoom.</p>
+      <button id="exp-open" class="ghost-btn">Exporter la carte…</button>
+      <p class="muted-inline" style="margin-top:6px">Image haute définition (PNG / JPEG / SVG) — toute la carte ou une seule sous-zone.</p>
     </section>
 
     <footer class="sidebar__footer">
@@ -88,6 +88,37 @@
   <div id="results" class="results" hidden></div>
   <aside id="detail-panel" class="detail" hidden></aside>
   <div id="toast" class="toast" hidden></div>
+
+  <div id="export-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="exp-title">
+      <header class="modal__header">
+        <h3 id="exp-title">Exporter la carte</h3>
+        <button class="modal__close" data-close aria-label="Fermer">×</button>
+      </header>
+      <div class="modal__body">
+        <div class="control">
+          <label>Zone à exporter</label>
+          <div id="exp-area" class="exp-area"></div>
+        </div>
+
+        <div class="control">
+          <label>Format</label>
+          <div class="seg" id="exp-format">
+            <button class="seg__btn is-active" data-fmt="png" title="Sans perte, transparence">PNG</button>
+            <button class="seg__btn" data-fmt="jpeg" title="Plus léger pour téléphone">JPEG</button>
+            <button class="seg__btn" data-fmt="svg" title="Vectoriel, zoomable à l'infini">SVG</button>
+          </div>
+        </div>
+
+        <p id="exp-info" class="muted-inline"></p>
+      </div>
+      <footer class="modal__footer">
+        <button class="ghost-btn" data-close>Annuler</button>
+        <button id="exp-go" class="ghost-btn primary">Exporter</button>
+      </footer>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
   <script src="js/app.js"></script>

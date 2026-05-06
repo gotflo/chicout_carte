@@ -587,35 +587,21 @@ function setupSearch() {
 
 // ---------- export SVG haute qualité ---------- //
 
-function downloadBlob(blob, filename) {
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  document.body.appendChild(a); a.click();
-  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
-}
-
 function escapeXml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'
   }[c]));
 }
 
-// projette [lng,lat] en pixels (relatif au canvas courant)
-function projectLngLat(coord) {
-  const p = map.project(coord);
-  return [p.x, p.y];
-}
-
-// Polygon|MultiPolygon → chaîne de path SVG ("M x,y L x,y Z …")
-function geomToSVGPath(geom) {
+// Polygon|MultiPolygon → chaîne de path SVG ("M x,y L x,y Z …"), via une fonction de projection
+function geomToSVGPath(geom, project) {
   const rings = geom.type === 'MultiPolygon'
     ? geom.coordinates.flat() : geom.coordinates;
   const parts = [];
   for (const ring of rings) {
     if (!ring.length) continue;
     const segs = ring.map((c, i) => {
-      const [x, y] = projectLngLat(c);
+      const [x, y] = project(c);
       return `${i === 0 ? 'M' : 'L'}${x.toFixed(2)},${y.toFixed(2)}`;
     });
     parts.push(segs.join(' ') + ' Z');
@@ -636,118 +622,171 @@ function starPath(cx, cy, R) {
 }
 
 async function exportSVG() {
-  toast('Génération du SVG…', 6000);
-  await new Promise(r => setTimeout(r, 50));   // laisser le toast s'afficher
+  toast('Génération du SVG haute définition…', 60000);
+  await new Promise(r => setTimeout(r, 50));
 
-  const canvas = map.getCanvas();
-  const w = canvas.width;
-  const h = canvas.height;
+  const onlyZoneIdx = exportState.area === 'all' ? null : exportState.area;
+  const bbox = exportBbox();
+  const q = EXPORT_QUALITY[exportState.quality];
+  const padding = onlyZoneIdx === null ? 60 : 40;
+  const cssWidth = q.width;
+  const aspectInner = mercatorBboxAspect(bbox);
+  const innerW = cssWidth - 2 * padding;
+  const cssHeight = Math.max(600, Math.round(innerW * aspectInner + 2 * padding));
 
-  // 1) basemap snapshot en haute résolution (data URL PNG)
-  // Le canvas WebGL est déjà à devicePixelRatio, donc déjà en haute déf.
-  let bgPNG = '';
-  try { bgPNG = canvas.toDataURL('image/png'); } catch (e) { console.warn(e); }
+  const { center, zoom } = computeFitView(bbox, cssWidth, cssHeight, padding);
 
-  const zk = 'z' + state.zoneset;
-  const lk = 'l' + state.zoneset;
-  const cols = state.colors[state.zoneset];
+  const host = document.createElement('div');
+  host.style.cssText = `position:fixed;left:0;top:0;width:${cssWidth}px;height:${cssHeight}px;visibility:hidden;pointer-events:none;z-index:-1;`;
+  document.body.appendChild(host);
+  const m = new maplibregl.Map({
+    container: host,
+    style: BASEMAPS[state.basemap],
+    center,
+    zoom,
+    pixelRatio: q.pixelRatio,
+    preserveDrawingBuffer: true,
+    interactive: false,
+    fadeDuration: 0,
+    attributionControl: false,
+  });
 
-  const svg = [];
-  svg.push(`<?xml version="1.0" encoding="UTF-8"?>`);
-  svg.push(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" `
-         + `viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" font-family="Inter, system-ui, sans-serif">`);
+  const w = Math.round(cssWidth * q.pixelRatio);
+  const h = Math.round(cssHeight * q.pixelRatio);
 
-  // métadonnées
-  svg.push(`<title>Zone 5 — ${state.zoneset} sous-zones</title>`);
-  svg.push(`<desc>Carte vectorielle générée le ${new Date().toLocaleString('fr-CA')}</desc>`);
+  let svgText;
+  try {
+    await new Promise(res => m.once('load', res));
+    m.resize();
+    m.jumpTo({ center, zoom });
+    m.resize();
+    await waitForIdle(m, 20000);
 
-  // 2) basemap (rasterisé)
-  if (bgPNG) {
-    svg.push(`<image x="0" y="0" width="${w}" height="${h}" href="${bgPNG}" preserveAspectRatio="xMidYMid slice"/>`);
-  } else {
-    svg.push(`<rect x="0" y="0" width="${w}" height="${h}" fill="#f5f5f5"/>`);
-  }
+    const canvas = m.getCanvas();
+    let bgPNG = '';
+    try { bgPNG = canvas.toDataURL('image/png'); } catch (e) { console.warn(e); }
 
-  // 3) sous-zones (vectoriel — zoom infini)
-  if (state.layers.zones) {
-    svg.push(`<g id="sous-zones" stroke-linejoin="round" stroke-linecap="round">`);
-    for (const f of state.data[zk].features) {
-      const idx = f.properties._idx;
-      const color = cols[idx];
-      const d = geomToSVGPath(f.geometry);
-      svg.push(`<path d="${d}" fill="${color}" fill-opacity="${state.fillOpacity}" `
-             + `stroke="${color}" stroke-width="${state.lineWidth}" stroke-opacity="${state.lineOpacity}"/>`);
+    const project = (coord) => {
+      const p = m.project(coord);
+      return [p.x * q.pixelRatio, p.y * q.pixelRatio];
+    };
+
+    const zk = 'z' + state.zoneset;
+    const lk = 'l' + state.zoneset;
+    const cols = state.colors[state.zoneset];
+    const features = state.data[zk].features;
+    const labels   = state.data[zk + '_labels'].features;
+    const lms      = state.data[lk].features;
+    const inScope  = (idx) => onlyZoneIdx === null || idx === onlyZoneIdx;
+    const sw = q.pixelRatio;
+
+    const svg = [];
+    svg.push(`<?xml version="1.0" encoding="UTF-8"?>`);
+    svg.push(`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" `
+           + `viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" font-family="Inter, system-ui, sans-serif">`);
+    svg.push(`<title>Zone 5 — ${onlyZoneIdx === null ? state.zoneset + ' sous-zones' : 'sous-zone ' + (onlyZoneIdx + 1)}</title>`);
+    svg.push(`<desc>Carte vectorielle générée le ${new Date().toLocaleString('fr-CA')}</desc>`);
+
+    if (bgPNG) {
+      svg.push(`<image x="0" y="0" width="${w}" height="${h}" href="${bgPNG}" preserveAspectRatio="xMidYMid slice"/>`);
+    } else {
+      svg.push(`<rect x="0" y="0" width="${w}" height="${h}" fill="#f5f5f5"/>`);
     }
-    svg.push(`</g>`);
-  }
 
-  // 4) rues (si activées)
-  if (state.layers.rues) {
-    svg.push(`<g id="rues">`);
-    for (const r of state.data.rues.features) {
-      const sz = r.properties['sz' + state.zoneset];
-      if (sz == null) continue;
-      const color = cols[sz - 1];
-      const [x, y] = projectLngLat(r.geometry.coordinates);
-      svg.push(`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="3" fill="${color}" stroke="#fff" stroke-width="0.7"/>`);
+    // voile blanc hors sous-zone choisie
+    if (onlyZoneIdx !== null && state.layers.zones) {
+      const f = features[onlyZoneIdx];
+      const d = geomToSVGPath(f.geometry, project);
+      svg.push(`<defs><mask id="zone-mask"><rect width="${w}" height="${h}" fill="white"/>`
+             + `<path d="${d}" fill="black" fill-rule="evenodd"/></mask></defs>`);
+      svg.push(`<rect width="${w}" height="${h}" fill="white" fill-opacity="0.55" mask="url(#zone-mask)"/>`);
     }
-    svg.push(`</g>`);
 
-    if (state.layers.rueLabels) {
-      svg.push(`<g id="rues-labels" font-size="11" fill="#222" paint-order="stroke" stroke="#fff" stroke-width="2" stroke-linejoin="round">`);
-      for (const r of state.data.rues.features) {
-        const sz = r.properties['sz' + state.zoneset];
-        if (sz == null) continue;
-        const [x, y] = projectLngLat(r.geometry.coordinates);
-        svg.push(`<text x="${x.toFixed(2)}" y="${(y + 12).toFixed(2)}" text-anchor="middle">${escapeXml(r.properties.name)}</text>`);
+    if (state.layers.zones) {
+      svg.push(`<g id="sous-zones" stroke-linejoin="round" stroke-linecap="round">`);
+      for (const f of features) {
+        const idx = f.properties._idx;
+        if (!inScope(idx)) continue;
+        const color = cols[idx];
+        const d = geomToSVGPath(f.geometry, project);
+        svg.push(`<path d="${d}" fill="${color}" fill-opacity="${state.fillOpacity}" `
+               + `stroke="${color}" stroke-width="${(state.lineWidth * sw).toFixed(2)}" stroke-opacity="${state.lineOpacity}" fill-rule="evenodd"/>`);
       }
       svg.push(`</g>`);
     }
-  }
 
-  // 5) numéros de sous-zones (badges blancs, bordure couleur, gros chiffre)
-  if (state.layers.numbers && state.layers.zones) {
-    svg.push(`<g id="zone-numbers" font-weight="800" font-size="22">`);
-    for (const f of state.data[zk + '_labels'].features) {
-      const [x, y] = projectLngLat(f.geometry.coordinates);
-      const color = f.properties.color;
-      svg.push(`<g transform="translate(${x.toFixed(2)},${y.toFixed(2)})">`
-             + `<circle r="22" fill="#ffffff" fill-opacity="0.95" stroke="${color}" stroke-width="3"/>`
-             + `<text text-anchor="middle" dominant-baseline="central" fill="#111">${f.properties._num}</text>`
-             + `</g>`);
+    if (state.layers.rues) {
+      svg.push(`<g id="rues">`);
+      for (const r of state.data.rues.features) {
+        const sz = r.properties['sz' + state.zoneset];
+        if (sz == null) continue;
+        if (!inScope(sz - 1)) continue;
+        const color = cols[sz - 1];
+        const [x, y] = project(r.geometry.coordinates);
+        svg.push(`<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${(3 * sw).toFixed(2)}" fill="${color}" stroke="#fff" stroke-width="${(0.7 * sw).toFixed(2)}"/>`);
+      }
+      svg.push(`</g>`);
+
+      if (state.layers.rueLabels) {
+        svg.push(`<g id="rues-labels" font-size="${(11 * sw).toFixed(1)}" fill="#222" paint-order="stroke" stroke="#fff" stroke-width="${(2 * sw).toFixed(1)}" stroke-linejoin="round">`);
+        for (const r of state.data.rues.features) {
+          const sz = r.properties['sz' + state.zoneset];
+          if (sz == null) continue;
+          if (!inScope(sz - 1)) continue;
+          const [x, y] = project(r.geometry.coordinates);
+          svg.push(`<text x="${x.toFixed(2)}" y="${(y + 12 * sw).toFixed(2)}" text-anchor="middle">${escapeXml(r.properties.name)}</text>`);
+        }
+        svg.push(`</g>`);
+      }
     }
-    svg.push(`</g>`);
-  }
 
-  // 6) points stratégiques : étoile orange + nom encadré (toujours lisible)
-  if (state.layers.landmarks) {
-    svg.push(`<g id="landmarks">`);
-    for (const f of state.data[lk].features) {
-      const [x, y] = projectLngLat(f.geometry.coordinates);
-      const name = f.properties.name;
-      // étoile
-      svg.push(`<path d="${starPath(x, y - 4, 14)}" fill="#ffb703" stroke="#1a1a1a" stroke-width="1.2"/>`);
-      // étiquette : rectangle blanc + texte en deux lignes (numéro + nom)
-      const padX = 6, padY = 3;
-      const fontSize = 11;
-      const approxW = name.length * 6.2 + padX * 2;
-      const lblY = y + 16;
-      svg.push(
-        `<g transform="translate(${x.toFixed(2)},${lblY.toFixed(2)})">`
-        + `<rect x="${(-approxW/2).toFixed(2)}" y="0" width="${approxW.toFixed(2)}" height="${(fontSize + padY*2).toFixed(2)}" `
-        + `rx="4" ry="4" fill="#ffffff" stroke="#1a1a1a" stroke-width="0.6" fill-opacity="0.97"/>`
-        + `<text x="0" y="${(fontSize + padY - 1).toFixed(2)}" text-anchor="middle" font-size="${fontSize}" font-weight="600" fill="#1a1a1a">`
-        + `Z${f.properties._num} · ${escapeXml(name)}`
-        + `</text>`
-        + `</g>`);
+    if (state.layers.numbers && state.layers.zones) {
+      svg.push(`<g id="zone-numbers" font-weight="800" font-size="${(22 * sw).toFixed(1)}">`);
+      for (const f of labels) {
+        if (!inScope(f.properties._idx)) continue;
+        const [x, y] = project(f.geometry.coordinates);
+        const color = f.properties.color;
+        svg.push(`<g transform="translate(${x.toFixed(2)},${y.toFixed(2)})">`
+               + `<circle r="${(22 * sw).toFixed(2)}" fill="#ffffff" fill-opacity="0.95" stroke="${color}" stroke-width="${(3 * sw).toFixed(2)}"/>`
+               + `<text text-anchor="middle" dominant-baseline="central" fill="#111">${f.properties._num}</text>`
+               + `</g>`);
+      }
+      svg.push(`</g>`);
     }
-    svg.push(`</g>`);
+
+    if (state.layers.landmarks) {
+      svg.push(`<g id="landmarks">`);
+      for (const f of lms) {
+        if (!inScope(f.properties._idx)) continue;
+        const [x, y] = project(f.geometry.coordinates);
+        const name = f.properties.name;
+        svg.push(`<path d="${starPath(x, y - 4 * sw, 14 * sw)}" fill="#ffb703" stroke="#1a1a1a" stroke-width="${(1.2 * sw).toFixed(2)}"/>`);
+        const padX = 6 * sw, padY = 3 * sw, fontSize = 11 * sw;
+        const approxW = name.length * 6.2 * sw + padX * 2;
+        const lblY = y + 16 * sw;
+        svg.push(
+          `<g transform="translate(${x.toFixed(2)},${lblY.toFixed(2)})">`
+          + `<rect x="${(-approxW/2).toFixed(2)}" y="0" width="${approxW.toFixed(2)}" height="${(fontSize + padY * 2).toFixed(2)}" `
+          + `rx="${(4 * sw).toFixed(2)}" ry="${(4 * sw).toFixed(2)}" fill="#ffffff" stroke="#1a1a1a" stroke-width="${(0.6 * sw).toFixed(2)}" fill-opacity="0.97"/>`
+          + `<text x="0" y="${(fontSize + padY - sw).toFixed(2)}" text-anchor="middle" font-size="${fontSize.toFixed(1)}" font-weight="600" fill="#1a1a1a">`
+          + `Z${f.properties._num} · ${escapeXml(name)}`
+          + `</text>`
+          + `</g>`);
+      }
+      svg.push(`</g>`);
+    }
+
+    svg.push(`</svg>`);
+    svgText = svg.join('\n');
+  } finally {
+    m.remove();
+    host.remove();
   }
 
-  svg.push(`</svg>`);
-
-  const blob = new Blob([svg.join('\n')], { type: 'image/svg+xml;charset=utf-8' });
-  downloadBlob(blob, `zone5_${state.zoneset}_sous-zones.svg`);
+  const onlyZoneIdx2 = exportState.area === 'all' ? null : exportState.area;
+  const suffix = onlyZoneIdx2 === null ? `${state.zoneset}sz` : `sz${onlyZoneIdx2 + 1}`;
+  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+  downloadBlob(blob, `zone5_${suffix}_${exportState.quality}.svg`);
   toast('SVG exporté ✓');
 }
 
@@ -802,7 +841,403 @@ function setupUI() {
   document.getElementById('reset-btn').onclick = recenter;
 
   // export
-  document.getElementById('exp-svg').onclick = exportSVG;
+  const expOpen = document.getElementById('exp-open');
+  if (expOpen) {
+    expOpen.onclick = openExportDialog;
+    setupExportDialog();
+  } else {
+    console.warn('Bouton #exp-open introuvable — index.html en cache ?');
+  }
+}
+
+// ---------- export haute définition ---------- //
+
+const EXPORT_QUALITY = {
+  standard: { width: 1400, pixelRatio: 2, label: '≈ 2800 px' },
+};
+
+const exportState = {
+  area: 'all',     // 'all' ou index numérique de sous-zone
+  quality: 'standard',
+  format: 'png',
+};
+
+function openExportDialog() {
+  buildExportAreaGrid();
+  updateExportInfo();
+  document.getElementById('export-modal').hidden = false;
+}
+function closeExportDialog() {
+  document.getElementById('export-modal').hidden = true;
+}
+
+function buildExportAreaGrid() {
+  const grid = document.getElementById('exp-area');
+  const cols = state.colors[state.zoneset];
+  const n = state.data['z' + state.zoneset].features.length;
+  const buttons = [`<button type="button" class="exp-area__all${exportState.area === 'all' ? ' is-active' : ''}" data-area="all">Toute la carte</button>`];
+  for (let i = 0; i < n; i++) {
+    const active = exportState.area === i ? ' is-active' : '';
+    buttons.push(`<button type="button" class="exp-zone${active}" style="--zone-color:${cols[i]}" data-area="${i}">${i + 1}</button>`);
+  }
+  grid.innerHTML = buttons.join('');
+  grid.querySelectorAll('[data-area]').forEach(b => {
+    b.onclick = () => {
+      const v = b.dataset.area;
+      exportState.area = v === 'all' ? 'all' : +v;
+      grid.querySelectorAll('[data-area]').forEach(x => x.classList.remove('is-active'));
+      b.classList.add('is-active');
+      updateExportInfo();
+    };
+  });
+}
+
+function setupExportDialog() {
+  const modal = document.getElementById('export-modal');
+  modal.querySelectorAll('[data-close]').forEach(el => el.onclick = closeExportDialog);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !modal.hidden) closeExportDialog();
+  });
+  document.querySelectorAll('#exp-format .seg__btn').forEach(b => {
+    b.onclick = () => {
+      document.querySelectorAll('#exp-format .seg__btn').forEach(x => x.classList.remove('is-active'));
+      b.classList.add('is-active');
+      exportState.format = b.dataset.fmt;
+      updateExportInfo();
+    };
+  });
+  document.getElementById('exp-go').onclick = runExport;
+}
+
+function updateExportInfo() {
+  const target = exportState.area === 'all'
+    ? `Toute la zone 5 (${state.zoneset} sous-zones)`
+    : `Sous-zone ${exportState.area + 1} uniquement`;
+  const fmt = exportState.format.toUpperCase();
+  const info = exportState.format === 'svg'
+    ? `${target} — vectoriel, zoom infini.`
+    : `${target} — ${fmt}, basemap “${state.basemap}” haute résolution.`;
+  document.getElementById('exp-info').textContent = info;
+}
+
+async function runExport() {
+  const btn = document.getElementById('exp-go');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Génération…';
+  try {
+    if (exportState.format === 'svg') {
+      await exportSVG();
+    } else {
+      await exportRasterHighRes();
+    }
+    closeExportDialog();
+  } catch (err) {
+    console.error(err);
+    toast('Échec de l’export — voir la console.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+function exportBbox() {
+  const raw = exportState.area === 'all'
+    ? fcBbox(state.data['z' + state.zoneset])
+    : featureBbox(state.data['z' + state.zoneset].features[exportState.area]);
+  // 4 % de marge pour garantir que badges et étoiles ne sortent pas
+  const dx = (raw[2] - raw[0]) * 0.04;
+  const dy = (raw[3] - raw[1]) * 0.04;
+  return [raw[0] - dx, raw[1] - dy, raw[2] + dx, raw[3] + dy];
+}
+
+function downloadBlob(blob, filename) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 200);
+}
+
+async function exportRasterHighRes() {
+  toast('Génération de l’image haute définition…', 60000);
+  const q = EXPORT_QUALITY[exportState.quality];
+  const bbox = exportBbox();
+  const onlyZoneIdx = exportState.area === 'all' ? null : exportState.area;
+  const padding = onlyZoneIdx === null ? 60 : 40;
+  const cssWidth = q.width;
+  // hauteur calculée pour que le bbox + padding rentre exactement dans le canvas
+  const aspectInner = mercatorBboxAspect(bbox);
+  const innerW = cssWidth - 2 * padding;
+  const innerH = innerW * aspectInner;
+  const cssHeight = Math.max(600, Math.round(innerH + 2 * padding));
+
+  const blob = await renderMapImage({
+    bbox, padding,
+    cssWidth, cssHeight,
+    pixelRatio: q.pixelRatio,
+    onlyZoneIdx,
+    format: exportState.format,
+  });
+
+  const suffix = onlyZoneIdx === null ? `${state.zoneset}sz` : `sz${onlyZoneIdx + 1}`;
+  const ext = exportState.format === 'jpeg' ? 'jpg' : 'png';
+  downloadBlob(blob, `zone5_${suffix}_${exportState.quality}.${ext}`);
+  const w = Math.round(cssWidth * q.pixelRatio);
+  const h = Math.round(cssHeight * q.pixelRatio);
+  toast(`Image exportée — ${w}×${h} px ✓`);
+}
+
+// projection Mercator unitaire (0..1)
+function mercY(lat) {
+  const s = Math.sin(lat * Math.PI / 180);
+  return 0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI);
+}
+function mercX(lng) { return (lng + 180) / 360; }
+
+function mercatorBboxAspect(bbox) {
+  const dx = mercX(bbox[2]) - mercX(bbox[0]);
+  const dy = mercY(bbox[1]) - mercY(bbox[3]); // mercY décroît avec la latitude
+  return dy / Math.max(dx, 1e-12);
+}
+
+// Zoom & centre qui font tenir bbox dans (cssWidth-2p)×(cssHeight-2p)
+function computeFitView(bbox, cssWidth, cssHeight, padding) {
+  const TILE_SIZE = 512; // taille du monde à zoom 0 dans le repère MapLibre
+  const dx = mercX(bbox[2]) - mercX(bbox[0]);
+  const dy = mercY(bbox[1]) - mercY(bbox[3]);
+  const availW = Math.max(1, cssWidth - 2 * padding);
+  const availH = Math.max(1, cssHeight - 2 * padding);
+  const zx = Math.log2(availW / (dx * TILE_SIZE));
+  const zy = Math.log2(availH / (dy * TILE_SIZE));
+  const zoom = Math.min(zx, zy, 19);
+  return { center: [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], zoom };
+}
+
+async function renderMapImage({ bbox, padding, cssWidth, cssHeight, pixelRatio, onlyZoneIdx, format }) {
+  // Conteneur posé hors-écran, mais avec un layout fiable pour MapLibre.
+  const host = document.createElement('div');
+  host.style.cssText = `position:fixed;left:0;top:0;width:${cssWidth}px;height:${cssHeight}px;visibility:hidden;pointer-events:none;z-index:-1;`;
+  document.body.appendChild(host);
+
+  // Centre + zoom calculés mathématiquement → la caméra est correcte dès la
+  // construction. On ne dépend pas de fitBounds (qui se comporte mal avec
+  // un conteneur visibility:hidden).
+  const { center, zoom } = computeFitView(bbox, cssWidth, cssHeight, padding);
+
+  const m = new maplibregl.Map({
+    container: host,
+    style: BASEMAPS[state.basemap],
+    center,
+    zoom,
+    pixelRatio,
+    preserveDrawingBuffer: true,
+    interactive: false,
+    fadeDuration: 0,
+    attributionControl: false,
+  });
+
+  try {
+    await new Promise(res => m.once('load', res));
+    m.resize();                     // s'assurer que clientWidth/Height sont connus
+    m.jumpTo({ center, zoom });     // re-cale la caméra exactement
+    m.resize();
+    await waitForIdle(m, 20000);
+
+    const src = m.getCanvas();
+    const out = document.createElement('canvas');
+    out.width = src.width;
+    out.height = src.height;
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, 0, 0);
+
+    drawOverlaysOnCanvas(ctx, m, pixelRatio, onlyZoneIdx);
+
+    const mime = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const quality = format === 'jpeg' ? 0.93 : undefined;
+    return await new Promise((res, rej) =>
+      out.toBlob(b => b ? res(b) : rej(new Error('toBlob a échoué')), mime, quality)
+    );
+  } finally {
+    m.remove();
+    host.remove();
+  }
+}
+
+function waitForIdle(m, timeoutMs = 15000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => { if (!done) { done = true; resolve(); } };
+    const tick = () => {
+      try {
+        if (m.areTilesLoaded() && m.loaded() && !m.isMoving() && !m.isZooming()) {
+          finish();
+        } else {
+          m.once('idle', tick);
+        }
+      } catch { finish(); }
+    };
+    m.once('idle', tick);
+    setTimeout(finish, timeoutMs);
+  });
+}
+
+function drawOverlaysOnCanvas(ctx, m, scale, onlyZoneIdx) {
+  const zk = 'z' + state.zoneset;
+  const lk = 'l' + state.zoneset;
+  const cols = state.colors[state.zoneset];
+  const features = state.data[zk].features;
+  const labels   = state.data[zk + '_labels'].features;
+  const lms      = state.data[lk].features;
+
+  // si on exporte une seule sous-zone : voile blanc à l'extérieur du polygone choisi.
+  // On construit le voile sur un canvas séparé (sinon `destination-out` effacerait
+  // aussi le fond de carte à l'intérieur du polygone).
+  if (onlyZoneIdx !== null && state.layers.zones) {
+    const f = features[onlyZoneIdx];
+    const veil = document.createElement('canvas');
+    veil.width = ctx.canvas.width;
+    veil.height = ctx.canvas.height;
+    const vctx = veil.getContext('2d');
+    vctx.fillStyle = 'rgba(255,255,255,0.65)';
+    vctx.fillRect(0, 0, veil.width, veil.height);
+    vctx.globalCompositeOperation = 'destination-out';
+    tracePolygonPath(vctx, m, f.geometry, scale);
+    vctx.fill('evenodd');
+    ctx.drawImage(veil, 0, 0);
+  }
+
+  // sous-zones (polygones)
+  if (state.layers.zones) {
+    ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    for (const f of features) {
+      const idx = f.properties._idx;
+      if (onlyZoneIdx !== null && idx !== onlyZoneIdx) continue;
+      const color = cols[idx];
+      tracePolygonPath(ctx, m, f.geometry, scale);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = state.fillOpacity;
+      ctx.fill('evenodd');
+      ctx.globalAlpha = state.lineOpacity;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = state.lineWidth * scale;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // rues (points)
+  if (state.layers.rues) {
+    for (const r of state.data.rues.features) {
+      const sz = r.properties['sz' + state.zoneset];
+      if (sz == null) continue;
+      if (onlyZoneIdx !== null && (sz - 1) !== onlyZoneIdx) continue;
+      const p = m.project(r.geometry.coordinates);
+      const x = p.x * scale, y = p.y * scale;
+      ctx.beginPath(); ctx.arc(x, y, 3 * scale, 0, Math.PI * 2);
+      ctx.fillStyle = cols[sz - 1]; ctx.fill();
+      ctx.lineWidth = 0.7 * scale; ctx.strokeStyle = '#fff'; ctx.stroke();
+    }
+    if (state.layers.rueLabels) {
+      ctx.font = `500 ${11 * scale}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      for (const r of state.data.rues.features) {
+        const sz = r.properties['sz' + state.zoneset];
+        if (sz == null) continue;
+        if (onlyZoneIdx !== null && (sz - 1) !== onlyZoneIdx) continue;
+        const p = m.project(r.geometry.coordinates);
+        const x = p.x * scale, y = (p.y + 6) * scale;
+        ctx.lineWidth = 3 * scale; ctx.strokeStyle = '#fff';
+        ctx.lineJoin = 'round';
+        ctx.strokeText(r.properties.name, x, y);
+        ctx.fillStyle = '#222';
+        ctx.fillText(r.properties.name, x, y);
+      }
+    }
+  }
+
+  // numéros de sous-zones
+  if (state.layers.numbers && state.layers.zones) {
+    ctx.font = `800 ${22 * scale}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const f of labels) {
+      if (onlyZoneIdx !== null && f.properties._idx !== onlyZoneIdx) continue;
+      const p = m.project(f.geometry.coordinates);
+      const x = p.x * scale, y = p.y * scale;
+      const r = 22 * scale;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill();
+      ctx.lineWidth = 3 * scale; ctx.strokeStyle = f.properties.color; ctx.stroke();
+      ctx.fillStyle = '#111';
+      ctx.fillText(String(f.properties._num), x, y);
+    }
+  }
+
+  // points stratégiques
+  if (state.layers.landmarks) {
+    for (const f of lms) {
+      if (onlyZoneIdx !== null && f.properties._idx !== onlyZoneIdx) continue;
+      const p = m.project(f.geometry.coordinates);
+      const x = p.x * scale, yStar = (p.y - 4) * scale;
+      drawStarOnCanvas(ctx, x, yStar, 14 * scale, '#ffb703', '#1a1a1a', 1.2 * scale);
+
+      const name = `Z${f.properties._num} · ${f.properties.name}`;
+      const fs = 11 * scale, padX = 6 * scale, padY = 3 * scale;
+      ctx.font = `600 ${fs}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const metrics = ctx.measureText(name);
+      const w = metrics.width + padX * 2;
+      const h = fs + padY * 2;
+      const lx = x - w / 2, ly = (p.y + 16) * scale;
+      ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      traceRoundedRect(ctx, lx, ly, w, h, 4 * scale);
+      ctx.fill();
+      ctx.lineWidth = 0.6 * scale; ctx.strokeStyle = '#1a1a1a'; ctx.stroke();
+      ctx.fillStyle = '#1a1a1a';
+      ctx.fillText(name, x, ly + h / 2);
+    }
+  }
+}
+
+function tracePolygonPath(ctx, m, geom, scale) {
+  const rings = geom.type === 'MultiPolygon' ? geom.coordinates.flat() : geom.coordinates;
+  ctx.beginPath();
+  for (const ring of rings) {
+    if (!ring.length) continue;
+    ring.forEach((c, i) => {
+      const p = m.project(c);
+      const x = p.x * scale, y = p.y * scale;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  }
+}
+
+function drawStarOnCanvas(ctx, cx, cy, R, fill, stroke, sw) {
+  const r = R * 0.42;
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5;
+    const rr = i % 2 === 0 ? R : r;
+    const x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.strokeStyle = stroke; ctx.lineWidth = sw; ctx.stroke();
+}
+
+function traceRoundedRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
 }
 
 function toast(msg, ms = 2400) {

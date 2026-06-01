@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-  <title>Zone 5 — Carte interactive des sous-zones</title>
+  <title>Chicoutimi — Carte interactive des tribus</title>
   <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,8 +13,8 @@
 <body>
   <aside id="sidebar" class="sidebar">
     <header class="sidebar__header">
-      <h1>Zone 5</h1>
-      <p class="sidebar__subtitle">Carte interactive des sous-tribus</p>
+      <h1>Chicoutimi</h1>
+      <p class="sidebar__subtitle">Carte interactive des tribus</p>
     </header>
 
     <section class="panel">
@@ -29,7 +29,7 @@
     <section class="panel">
       <h2 class="panel__title">Découpage</h2>
       <div class="seg" id="zoneset-seg">
-        <button class="seg__btn is-active" data-zoneset="9">9 sous-zones</button>
+        <button class="seg__btn is-active" data-zoneset="9">9 tribus</button>
         <button class="seg__btn" data-zoneset="12">12 sous-zones</button>
       </div>
     </section>
@@ -37,7 +37,7 @@
     <section class="panel">
       <h2 class="panel__title">Couches</h2>
       <ul class="layers">
-        <li><label class="toggle"><input type="checkbox" data-layer="zones" checked /><span>Sous-zones</span></label></li>
+        <li><label class="toggle"><input type="checkbox" data-layer="zones" checked /><span>Tribus</span></label></li>
         <li><label class="toggle"><input type="checkbox" data-layer="numbers" checked /><span>Numéros</span></label></li>
         <li><label class="toggle"><input type="checkbox" data-layer="landmarks" checked /><span>Points stratégiques</span></label></li>
         <li><label class="toggle"><input type="checkbox" data-layer="rues" /><span>Rues nommées</span></label></li>
@@ -46,7 +46,7 @@
     </section>
 
     <section class="panel">
-      <h2 class="panel__title">Style des sous-zones</h2>
+      <h2 class="panel__title">Style des tribus</h2>
       <div class="control">
         <label>Opacité du remplissage <span id="fill-opacity-val" class="muted-inline"></span></label>
         <input type="range" id="fill-opacity" min="0" max="1" step="0.05" />
@@ -63,7 +63,7 @@
     </section>
 
     <section class="panel">
-      <h2 class="panel__title">Aller à une sous-zone</h2>
+      <h2 class="panel__title">Aller à une tribu</h2>
       <input type="search" id="search" class="search" placeholder="Chercher une rue, un quartier…" />
       <div id="zone-grid" class="zone-grid"></div>
     </section>
@@ -71,7 +71,9 @@
     <section class="panel">
       <h2 class="panel__title">Exporter</h2>
       <button id="exp-open" class="ghost-btn">Exporter la carte…</button>
-      <p class="muted-inline" style="margin-top:6px">Image haute définition (PNG / JPEG / SVG) — toute la carte ou une seule sous-zone.</p>
+      <p class="muted-inline" style="margin-top:6px">Image haute définition (PNG / JPEG / SVG) — toute la carte ou une seule tribu.</p>
+      <button id="full-preview-open" class="ghost-btn" style="margin-top:10px">Aperçu A1 toutes tribus…</button>
+      <p class="muted-inline" style="margin-top:6px">Impression A1 (594×841 mm) avec légende par tribu.</p>
     </section>
 
     <footer class="sidebar__footer">
@@ -88,6 +90,53 @@
   <div id="results" class="results" hidden></div>
   <aside id="detail-panel" class="detail" hidden></aside>
   <div id="toast" class="toast" hidden></div>
+
+  <div id="full-preview" class="full-preview" hidden aria-hidden="true">
+    <header class="full-preview__header no-print">
+      <div class="full-preview__brand">
+        <div>
+          <p class="full-preview__eyebrow">Chicoutimi</p>
+          <h2 class="full-preview__title">Carte complète des tribus</h2>
+        </div>
+      </div>
+      <div class="full-preview__actions">
+        <button class="ghost-btn" id="full-preview-print">Imprimer (A1)</button>
+        <button class="ghost-btn" id="full-preview-close" aria-label="Fermer">Fermer</button>
+      </div>
+    </header>
+    <div class="full-preview__body">
+      <div class="full-preview__sheet" id="full-preview-sheet">
+        <div class="full-preview__map-area">
+          <div class="full-preview__map" id="full-preview-map"></div>
+        </div>
+        <aside class="full-preview__legend" id="full-preview-legend"></aside>
+      </div>
+    </div>
+  </div>
+
+  <div id="tribe-preview" class="tribe-preview" hidden aria-hidden="true">
+    <header class="tribe-preview__header no-print">
+      <div class="tribe-preview__brand">
+        <span class="tribe-preview__chip"></span>
+        <div>
+          <p class="tribe-preview__eyebrow">Tribu</p>
+          <h2 class="tribe-preview__title">—</h2>
+        </div>
+      </div>
+      <div class="tribe-preview__actions">
+        <button class="ghost-btn" id="tribe-preview-print">Imprimer (A3)</button>
+        <button class="ghost-btn" id="tribe-preview-close" aria-label="Fermer">Fermer</button>
+      </div>
+    </header>
+    <div class="tribe-preview__body">
+      <div class="tribe-preview__sheet" id="tribe-preview-sheet">
+        <div class="tribe-preview__map-area" id="tribe-preview-map-area">
+          <div class="tribe-preview__map" id="tribe-preview-map"></div>
+        </div>
+        <aside class="tribe-preview__legend" id="tribe-preview-legend"></aside>
+      </div>
+    </div>
+  </div>
 
   <div id="export-modal" class="modal" hidden>
     <div class="modal__backdrop" data-close></div>

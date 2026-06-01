@@ -25,6 +25,40 @@ const BASEMAPS = {
 
 const STORAGE_KEY = 'zone5.style.v1';
 
+// Tribus attribuées au format 9 zones (index 0..8 -> zone 1..9)
+const TRIBES_9 = [
+  'ZABULON',           // zone 1
+  'DAN',               // zone 2
+  'JUDA ET JOSEPH',    // zone 3
+  'RUBEN',             // zone 4
+  'GAD',               // zone 5
+  'NEPHTALIE',         // zone 6
+  'LEVI',              // zone 7
+  'SIMEON',            // zone 8
+  'ASER',              // zone 9
+];
+function zoneLabel(idx) {
+  if (state.zoneset === '9' && TRIBES_9[idx]) return TRIBES_9[idx];
+  return String(idx + 1);
+}
+function zoneTitle(idx) {
+  if (state.zoneset === '9' && TRIBES_9[idx]) return TRIBES_9[idx];
+  return 'Sous-zone ' + (idx + 1);
+}
+function exportFilename(onlyZoneIdx) {
+  if (onlyZoneIdx === null) {
+    return state.zoneset === '9' ? 'Chicoutimi' : `zone5_${state.zoneset}sz`;
+  }
+  if (state.zoneset === '9' && TRIBES_9[onlyZoneIdx]) {
+    return TRIBES_9[onlyZoneIdx]
+      .toLowerCase()
+      .replace(/\s+et\s+/g, '-')
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9-]/g, '');
+  }
+  return `zone5_sz${onlyZoneIdx + 1}`;
+}
+
 const state = {
   zoneset: '9',
   basemap: 'osm',
@@ -249,43 +283,62 @@ function buildLayers() {
   applyVisibility();
 }
 
-// HTML markers — numéros
+// HTML markers — numéros / étiquettes de tribu
 const zoneNumMarkers = [];
 function buildZoneMarkers() {
   zoneNumMarkers.forEach(m => m.remove());
   zoneNumMarkers.length = 0;
   if (!state.layers.numbers || !state.layers.zones) return;
+  // En mode 9 tribus : pas de marqueur séparé ici, on fusionne avec le landmark
+  if (state.zoneset === '9') return;
   const fc = state.data['z' + state.zoneset + '_labels'];
   fc.features.forEach(f => {
     const el = document.createElement('div');
     el.className = 'zone-num-marker';
     el.style.borderColor = f.properties.color;
-    el.textContent = f.properties._num;
+    el.textContent = zoneLabel(f.properties._idx);
     zoneNumMarkers.push(new maplibregl.Marker({ element: el, anchor: 'center' })
       .setLngLat(f.geometry.coordinates).addTo(map));
   });
 }
 
-// HTML markers — landmarks (étoile)
+// HTML markers — landmarks (étoile + nom)
+// En mode 9 tribus : marqueur combiné ★ + NOM TRIBU + quartier (évite les
+// superpositions entre le pill de tribu et l'étiquette de quartier).
 const landmarkMarkers = [];
 function buildLandmarkMarkers() {
   landmarkMarkers.forEach(m => m.remove());
   landmarkMarkers.length = 0;
   if (!state.layers.landmarks) return;
+  const isTribe = state.zoneset === '9';
   const fc = state.data['l' + state.zoneset];
   fc.features.forEach(f => {
     const wrap = document.createElement('div');
-    wrap.className = 'lm-marker';
-    wrap.innerHTML = `
-      <div class="lm-star">★</div>
-      <div class="lm-label">${escapeHtml(f.properties.name)}</div>
-    `;
-    wrap.title = `Sous-zone ${f.properties._num} — ${f.properties.kind} : ${f.properties.name}`;
-    wrap.onclick = () => {
-      openZoneDetail(f.properties._idx);
-    };
-    landmarkMarkers.push(new maplibregl.Marker({ element: wrap, anchor: 'bottom' })
-      .setLngLat(f.geometry.coordinates).addTo(map));
+    const idx = f.properties._idx;
+    if (isTribe) {
+      const color = state.colors['9'][idx];
+      wrap.className = 'lm-marker lm-marker--tribe';
+      wrap.style.setProperty('--tribe-color', color);
+      wrap.innerHTML = `
+        <div class="lm-tribe-star">★</div>
+        <div class="lm-tribe-body">
+          <div class="lm-tribe-name">${escapeHtml(zoneTitle(idx))}</div>
+          <div class="lm-tribe-quartier">${escapeHtml(f.properties.name)}</div>
+        </div>
+      `;
+    } else {
+      wrap.className = 'lm-marker';
+      wrap.innerHTML = `
+        <div class="lm-star">★</div>
+        <div class="lm-label">${escapeHtml(f.properties.name)}</div>
+      `;
+    }
+    wrap.title = `${zoneTitle(idx)} — ${f.properties.kind} : ${f.properties.name}`;
+    wrap.onclick = () => openZoneDetail(idx);
+    landmarkMarkers.push(new maplibregl.Marker({
+      element: wrap,
+      anchor: isTribe ? 'center' : 'bottom',
+    }).setLngLat(f.geometry.coordinates).addTo(map));
   });
 }
 
@@ -341,7 +394,7 @@ function attachInteractions() {
     const f = e.features[0];
     popup.setLngLat(e.lngLat).setHTML(`
       <div class="popup-title">${escapeHtml(f.properties.name)}</div>
-      <div class="popup-meta">${escapeHtml(f.properties.kind || '')} · sous-zone ${f.properties['sz' + state.zoneset] ?? '?'}</div>
+      <div class="popup-meta">${escapeHtml(f.properties.kind || '')} · ${escapeHtml(zoneTitle((f.properties['sz' + state.zoneset] ?? 1) - 1))}</div>
     `).addTo(map);
   });
   map.on('mouseenter', 'rues-pt', () => map.getCanvas().style.cursor = 'pointer');
@@ -353,7 +406,7 @@ function showZonePopup(idx, lngLat) {
   const lm = state.data['l' + state.zoneset].features[idx];
   const color = state.colors[state.zoneset][idx];
   popup.setLngLat(lngLat).setHTML(`
-    <div class="popup-title"><span class="popup-swatch" style="background:${color}"></span>Sous-zone ${idx + 1}</div>
+    <div class="popup-title"><span class="popup-swatch" style="background:${color}"></span>${escapeHtml(zoneTitle(idx))}</div>
     <div class="popup-meta">${c.rues.length} rue(s) nommée(s)</div>
     <div class="popup-meta"><strong>${escapeHtml(lm.properties.kind)} :</strong> ${escapeHtml(lm.properties.name)}</div>
     <button class="popup-btn" data-zone="${idx}">Voir le détail</button>
@@ -393,10 +446,13 @@ function openZoneDetail(idx) {
   panel.innerHTML = `
     <div class="detail__header" style="border-color:${color}">
       <div>
-        <h3><span class="popup-swatch" style="background:${color}"></span>Sous-zone ${idx + 1}</h3>
+        <h3><span class="popup-swatch" style="background:${color}"></span>${escapeHtml(zoneTitle(idx))}</h3>
         <div class="muted-inline">${c.rues.length} rue(s) · ${escapeHtml(lm.properties.kind)} : <strong>${escapeHtml(lm.properties.name)}</strong></div>
       </div>
-      <button class="detail__close" id="detail-close" aria-label="Fermer">×</button>
+      <div class="detail__header-actions">
+        <button class="ghost-btn small" id="detail-preview" data-idx="${idx}">Aperçu plein écran</button>
+        <button class="detail__close" id="detail-close" aria-label="Fermer">×</button>
+      </div>
     </div>
     <div class="detail__body">
       <h4>Point stratégique</h4>
@@ -415,6 +471,11 @@ function openZoneDetail(idx) {
   panel.querySelector('#detail-close').addEventListener('click', (e) => {
     e.stopPropagation(); panel.hidden = true;
   });
+  const previewBtn = panel.querySelector('#detail-preview');
+  if (previewBtn) previewBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openTribePreview(+previewBtn.dataset.idx);
+  });
   panel.querySelectorAll('li[data-kind]').forEach(li => {
     li.onclick = () => {
       const f = li.dataset.kind === 'lm' ? lm : c.rues[+li.dataset.i];
@@ -426,6 +487,462 @@ function openZoneDetail(idx) {
       `).addTo(map);
     };
   });
+}
+
+// ---------- aperçu plein écran d'une tribu ---------- //
+//
+// Approche : on découpe le conteneur de la carte à la forme exacte du polygone
+// via CSS clip-path. La carte est zoomée pour que la bounding-box du polygone
+// remplisse le conteneur ; tout ce qui dépasse la silhouette devient transparent.
+// Résultat : seule la forme de la tribu est visible, sans bordure rectangulaire.
+
+let tribePreviewMap = null;
+let tribePreviewIdx = null;
+let tribePreviewResizeObserver = null;
+
+function openTribePreview(idx) {
+  if (state.zoneset !== '9') return;
+  tribePreviewIdx = idx;
+
+  const root = document.getElementById('tribe-preview');
+  const color = state.colors[state.zoneset][idx];
+  const f = state.data['z' + state.zoneset].features[idx];
+  const lm = state.data['l' + state.zoneset].features[idx];
+  const c = computeZoneContents(idx);
+
+  // en-tête
+  root.querySelector('.tribe-preview__title').textContent = zoneTitle(idx);
+  root.querySelector('.tribe-preview__chip').style.background = color;
+  root.style.setProperty('--tribe-color', color);
+
+  // légende (exclut les sentiers "path")
+  const ruesFiltrees = c.rues.filter(r => (r.properties.kind || '').toLowerCase() !== 'path');
+  const legend = document.getElementById('tribe-preview-legend');
+  legend.innerHTML = `
+    <header class="tp-legend__header" style="border-color:${color}">
+      <p class="tp-legend__eyebrow">Tribu</p>
+      <h2 class="tp-legend__name">${escapeHtml(zoneTitle(idx))}</h2>
+    </header>
+    <section class="tp-legend__section">
+      <h3 class="tp-legend__h3">${escapeHtml(lm.properties.kind || 'Quartier')}</h3>
+      <p class="tp-legend__quartier">${escapeHtml(lm.properties.name)}</p>
+    </section>
+    <section class="tp-legend__section">
+      <h3 class="tp-legend__h3">Rues nommées <span class="tp-legend__count">${ruesFiltrees.length}</span></h3>
+      ${ruesFiltrees.length
+        ? `<ol class="tp-legend__streets">${ruesFiltrees.map(r => `<li>${escapeHtml(r.properties.name)}</li>`).join('')}</ol>`
+        : `<p class="tp-legend__empty">Aucune rue répertoriée</p>`}
+    </section>
+    <footer class="tp-legend__footer">
+      <span class="tp-legend__brand">Chicoutimi · Carte des tribus</span>
+      <span class="tp-legend__date">${new Date().toLocaleDateString('fr-CA')}</span>
+    </footer>
+  `;
+
+  root.hidden = false;
+  root.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('has-tribe-preview');
+
+  // (ré)initialise la carte
+  if (tribePreviewMap) { tribePreviewMap.remove(); tribePreviewMap = null; }
+  const mapEl = document.getElementById('tribe-preview-map');
+  mapEl.innerHTML = '';
+
+  tribePreviewMap = new maplibregl.Map({
+    container: mapEl,
+    style: BASEMAPS[state.basemap],
+    preserveDrawingBuffer: true,
+    attributionControl: false,
+    interactive: false,
+    fadeDuration: 0,
+    pixelRatio: 4,           // 16× pixels → impression A3 ultra-premium
+    maxTileCacheSize: 1024,
+    refreshExpiredTiles: false,
+    maxZoom: 22,
+  });
+
+  tribePreviewMap.once('load', () => {
+    tribePreviewMap.addSource('tp-zone', {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [f] }
+    });
+    // teinte colorée à l'intérieur de la tribu
+    tribePreviewMap.addLayer({
+      id: 'tp-fill', type: 'fill', source: 'tp-zone',
+      paint: { 'fill-color': color, 'fill-opacity': 0.14 }
+    });
+    // contour pointillé coloré pour délimiter la tribu
+    tribePreviewMap.addLayer({
+      id: 'tp-line', type: 'line', source: 'tp-zone',
+      paint: {
+        'line-color': color,
+        'line-width': 5,
+        'line-opacity': 1,
+        'line-dasharray': [2, 2],
+      },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }
+    });
+    fitToTribe(f);
+    addTribePreviewLandmark(lm);
+  });
+
+  // refit si le conteneur change de taille
+  if (tribePreviewResizeObserver) tribePreviewResizeObserver.disconnect();
+  const area = document.getElementById('tribe-preview-map-area');
+  tribePreviewResizeObserver = new ResizeObserver(() => {
+    if (!tribePreviewMap || tribePreviewIdx === null) return;
+    tribePreviewMap.resize();
+    const ff = state.data['z' + state.zoneset].features[tribePreviewIdx];
+    fitToTribe(ff);
+  });
+  tribePreviewResizeObserver.observe(area);
+}
+
+function fitToTribe(zoneFeature) {
+  const mapEl = document.getElementById('tribe-preview-map');
+  const cw = mapEl.clientWidth || 1;
+  const ch = mapEl.clientHeight || 1;
+  const ring = extractOuterRing(zoneFeature);
+  const bearing = findOptimalBearing(ring, cw, ch);
+  const b = featureBbox(zoneFeature);
+  // padding négatif via expand artificiel : on étend la bbox de 1% à
+  // l'extérieur pour s'assurer que rien n'est coupé, et fitBounds zoome au
+  // maximum dessus avec padding 0. Résultat : tribu centrée et bien grosse.
+  const dx = (b[2] - b[0]) * 0.01;
+  const dy = (b[3] - b[1]) * 0.01;
+  tribePreviewMap.fitBounds(
+    [[b[0] - dx, b[1] - dy], [b[2] + dx, b[3] + dy]],
+    { padding: 0, duration: 0, bearing }
+  );
+}
+
+function extractOuterRing(zoneFeature) {
+  const g = zoneFeature.geometry;
+  if (g.type === 'Polygon') return g.coordinates[0];
+  if (g.type === 'MultiPolygon') {
+    return g.coordinates.map(p => p[0]).reduce((a, b) => a.length >= b.length ? a : b);
+  }
+  return [];
+}
+
+/**
+ * Renvoie le bearing (degrés, convention maplibre) qui maximise la taille
+ * à l'écran de la bbox tournée du polygone, étant donné les dimensions
+ * du conteneur. Métrique = min(W/w, H/h) — l'échelle réelle de fitBounds.
+ */
+function findOptimalBearing(ring, containerW, containerH) {
+  if (!ring || ring.length < 3) return 0;
+  const meanLat = ring.reduce((s, p) => s + p[1], 0) / ring.length;
+  const kx = Math.cos(meanLat * Math.PI / 180);
+  let bestBearing = 0;
+  let bestScale = -Infinity;
+  for (let deg = -90; deg <= 90; deg += 1) {
+    const rad = deg * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const [lng, lat] of ring) {
+      const x = lng * kx;
+      const y = lat;
+      const rx = x * cos - y * sin;
+      const ry = x * sin + y * cos;
+      if (rx < minX) minX = rx; if (rx > maxX) maxX = rx;
+      if (ry < minY) minY = ry; if (ry > maxY) maxY = ry;
+    }
+    const w = maxX - minX, h = maxY - minY;
+    if (w <= 0 || h <= 0) continue;
+    const scale = Math.min(containerW / w, containerH / h);
+    if (scale > bestScale) {
+      bestScale = scale;
+      bestBearing = deg;
+    }
+  }
+  return bestBearing;
+}
+
+// Construit un polygone "monde entier" avec le polygone de la tribu en trou.
+// Utilisé comme voile blanc pour masquer tout ce qui n'est PAS dans la tribu.
+function buildOutsideMask(zoneFeature) {
+  const world = [[-180, -85], [180, -85], [180, 85], [-180, 85], [-180, -85]];
+  const holes = [];
+  const g = zoneFeature.geometry;
+  if (g.type === 'Polygon') {
+    holes.push(g.coordinates[0]);
+  } else if (g.type === 'MultiPolygon') {
+    for (const poly of g.coordinates) holes.push(poly[0]);
+  }
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'Polygon', coordinates: [world, ...holes] }
+  };
+}
+
+// Marker landmark — supprime l'ancien avant d'en créer un nouveau
+let tribePreviewLandmarkMarker = null;
+function addTribePreviewLandmark(lm) {
+  if (!tribePreviewMap || !lm) return;
+  if (tribePreviewLandmarkMarker) {
+    tribePreviewLandmarkMarker.remove();
+    tribePreviewLandmarkMarker = null;
+  }
+  const el = document.createElement('div');
+  el.className = 'tp-lm-marker';
+  el.innerHTML = `<div class="tp-lm-star">★</div><div class="tp-lm-label">${escapeHtml(lm.properties.name)}</div>`;
+  tribePreviewLandmarkMarker = new maplibregl.Marker({ element: el, anchor: 'bottom' })
+    .setLngLat(lm.geometry.coordinates).addTo(tribePreviewMap);
+}
+
+function closeTribePreview() {
+  const root = document.getElementById('tribe-preview');
+  root.hidden = true;
+  root.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('has-tribe-preview');
+  if (tribePreviewResizeObserver) {
+    tribePreviewResizeObserver.disconnect();
+    tribePreviewResizeObserver = null;
+  }
+  if (tribePreviewMap) { tribePreviewMap.remove(); tribePreviewMap = null; }
+  if (tribePreviewLandmarkMarker) { tribePreviewLandmarkMarker.remove(); tribePreviewLandmarkMarker = null; }
+  tribePreviewIdx = null;
+}
+
+function setupTribePreview() {
+  document.getElementById('tribe-preview-close').addEventListener('click', closeTribePreview);
+  document.getElementById('tribe-preview-print').addEventListener('click', triggerTribePrint);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('tribe-preview').hidden) closeTribePreview();
+  });
+  window.addEventListener('beforeprint', handlePrintEvent);
+  window.addEventListener('afterprint', handlePrintEvent);
+}
+
+// Recadre la carte avant et après l'impression pour que les nouvelles
+// dimensions de page (A3) soient prises en compte par MapLibre.
+let _pageStyle = null;
+function injectPageRule(rule) {
+  if (_pageStyle && _pageStyle.parentNode) _pageStyle.parentNode.removeChild(_pageStyle);
+  _pageStyle = document.createElement('style');
+  _pageStyle.id = 'dynamic-page-rule';
+  _pageStyle.textContent = '@media print { ' + rule + ' }';
+  document.head.appendChild(_pageStyle);
+}
+function cleanupPageRule() {
+  if (_pageStyle && _pageStyle.parentNode) _pageStyle.parentNode.removeChild(_pageStyle);
+  _pageStyle = null;
+}
+function triggerTribePrint() {
+  injectPageRule('@page { size: A3 landscape; margin: 6mm; }');
+  setTimeout(() => {
+    window.print();
+    setTimeout(cleanupPageRule, 500);
+  }, 60);
+}
+
+function handlePrintEvent() {
+  if (!tribePreviewMap || tribePreviewIdx === null) return;
+  tribePreviewMap.resize();
+  fitToTribe(state.data['z' + state.zoneset].features[tribePreviewIdx]);
+}
+
+// ---------- aperçu plein écran de TOUTES les tribus (A1) ---------- //
+
+let fullPreviewMap = null;
+let fullPreviewResizeObserver = null;
+const fullPreviewMarkers = [];
+
+function openFullPreview() {
+  // Force temporairement le zoneset à '9' uniquement pour le calcul
+  // des contenus (computeZoneContents lit state.zoneset)
+  const prevZoneset = state.zoneset;
+  state.zoneset = '9';
+  zoneCache.clear();
+
+  const root = document.getElementById('full-preview');
+  root.hidden = false;
+  root.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('has-full-preview');
+
+  // Légende — une section par tribu, regroupant ses rues
+  const legend = document.getElementById('full-preview-legend');
+  const sections = [];
+  state.data['z9'].features.forEach((f, idx) => {
+    const color = state.colors['9'][idx];
+    const lm = state.data['l9'].features[idx];
+    const c = computeZoneContents(idx);
+    const rues = c.rues.filter(r => (r.properties.kind || '').toLowerCase() !== 'path');
+    sections.push(`
+      <section class="fp-legend__section" style="--tribe-color:${color}">
+        <header class="fp-legend__head">
+          <span class="fp-legend__dot"></span>
+          <h3 class="fp-legend__name">${escapeHtml(zoneTitle(idx))}</h3>
+          <span class="fp-legend__count">${rues.length}</span>
+        </header>
+        <p class="fp-legend__quartier"><em>${escapeHtml(lm.properties.kind || 'Quartier')} :</em> <strong>${escapeHtml(lm.properties.name)}</strong></p>
+        <ol class="fp-legend__streets">
+          ${rues.map(r => `<li>${escapeHtml(r.properties.name)}</li>`).join('')}
+        </ol>
+      </section>
+    `);
+  });
+  legend.innerHTML = sections.join('');
+
+  // (ré)initialise la carte
+  if (fullPreviewMap) { fullPreviewMap.remove(); fullPreviewMap = null; }
+  fullPreviewMarkers.forEach(m => m.remove());
+  fullPreviewMarkers.length = 0;
+  const mapEl = document.getElementById('full-preview-map');
+  mapEl.innerHTML = '';
+
+  fullPreviewMap = new maplibregl.Map({
+    container: mapEl,
+    style: BASEMAPS[state.basemap],
+    preserveDrawingBuffer: true,
+    attributionControl: false,
+    interactive: false,
+    fadeDuration: 0,
+    pixelRatio: 2,           // équilibre qualité / taille canvas pour A1
+    maxTileCacheSize: 2048,
+    refreshExpiredTiles: false,
+    maxZoom: 22,
+  });
+
+  fullPreviewMap.once('load', () => {
+    // injecte la couleur de chaque tribu dans ses properties pour data-driven styling
+    const zones = JSON.parse(JSON.stringify(state.data['z9']));
+    zones.features.forEach((f, i) => {
+      f.properties = f.properties || {};
+      f.properties.color = state.colors['9'][i];
+    });
+
+    fullPreviewMap.addSource('fp-zones', { type: 'geojson', data: zones });
+    fullPreviewMap.addLayer({
+      id: 'fp-fill', type: 'fill', source: 'fp-zones',
+      paint: {
+        'fill-color': ['get', 'color'],
+        'fill-opacity': 0.22,
+      }
+    });
+    fullPreviewMap.addLayer({
+      id: 'fp-line', type: 'line', source: 'fp-zones',
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 3,
+        'line-opacity': 1,
+      },
+      layout: { 'line-join': 'round', 'line-cap': 'round' }
+    });
+
+    // étiquettes combinées : ★ + NOM TRIBU + nom du quartier
+    // positionnées au point stratégique de chaque tribu
+    state.data['l9'].features.forEach((lm, idx) => {
+      const color = state.colors['9'][idx];
+      const el = document.createElement('div');
+      el.className = 'fp-tribe-marker';
+      el.style.setProperty('--tribe-color', color);
+      el.innerHTML = `
+        <div class="fp-tribe-marker__star">★</div>
+        <div class="fp-tribe-marker__body">
+          <div class="fp-tribe-marker__name">${escapeHtml(zoneTitle(idx))}</div>
+          <div class="fp-tribe-marker__quartier">${escapeHtml(lm.properties.name)}</div>
+        </div>
+      `;
+      const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
+        .setLngLat(lm.geometry.coordinates).addTo(fullPreviewMap);
+      fullPreviewMarkers.push(marker);
+    });
+
+    fitToFullExtent();
+  });
+
+  if (fullPreviewResizeObserver) fullPreviewResizeObserver.disconnect();
+  fullPreviewResizeObserver = new ResizeObserver(() => {
+    if (!fullPreviewMap) return;
+    fullPreviewMap.resize();
+    fitToFullExtent();
+  });
+  fullPreviewResizeObserver.observe(mapEl);
+
+  // Mémorise pour restaurer en cas de zoneset différent
+  root.dataset.prevZoneset = prevZoneset;
+  // Restaure le zoneset après calculs (l'aperçu utilise ses propres données)
+  if (prevZoneset !== '9') {
+    state.zoneset = prevZoneset;
+    zoneCache.clear();
+  }
+}
+
+function fitToFullExtent() {
+  if (!fullPreviewMap) return;
+  const bb = fcBbox(state.data['z9']);
+  fullPreviewMap.fitBounds([[bb[0], bb[1]], [bb[2], bb[3]]], {
+    padding: 30, duration: 0
+  });
+}
+
+function closeFullPreview() {
+  const root = document.getElementById('full-preview');
+  root.hidden = true;
+  root.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('has-full-preview');
+  if (fullPreviewResizeObserver) {
+    fullPreviewResizeObserver.disconnect();
+    fullPreviewResizeObserver = null;
+  }
+  fullPreviewMarkers.forEach(m => m.remove());
+  fullPreviewMarkers.length = 0;
+  if (fullPreviewMap) { fullPreviewMap.remove(); fullPreviewMap = null; }
+}
+
+function setupFullPreview() {
+  const openBtn = document.getElementById('full-preview-open');
+  if (openBtn) openBtn.addEventListener('click', openFullPreview);
+  document.getElementById('full-preview-close').addEventListener('click', closeFullPreview);
+  document.getElementById('full-preview-print').addEventListener('click', triggerFullPrint);
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !document.getElementById('full-preview').hidden) closeFullPreview();
+  });
+  // Recadrage avant/après impression A1
+  window.addEventListener('beforeprint', () => {
+    if (!fullPreviewMap) return;
+    fullPreviewMap.resize();
+    fitToFullExtent();
+  });
+  window.addEventListener('afterprint', () => {
+    if (!fullPreviewMap) return;
+    fullPreviewMap.resize();
+    fitToFullExtent();
+  });
+}
+
+async function triggerFullPrint() {
+  if (!fullPreviewMap) return;
+
+  injectPageRule(
+    '@page { size: A1 landscape; margin: 6mm; } ' +
+    '@page { size: 841mm 594mm; margin: 6mm; }'
+  );
+
+  toast('⚠ Dans la boîte de dialogue : Destination = "Enregistrer au format PDF" · Format de papier = A1.', 10000);
+
+  // Force MapLibre à rerender à la taille A1 cible avant l'impression
+  document.body.classList.add('print-fullpreview-prepare');
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  fullPreviewMap.resize();
+  fitToFullExtent();
+  await new Promise(r => {
+    if (fullPreviewMap.areTilesLoaded() && !fullPreviewMap.isMoving()) r();
+    else fullPreviewMap.once('idle', r);
+  });
+  await new Promise(r => setTimeout(r, 200));
+
+  window.print();
+
+  // Restaure le layout écran
+  document.body.classList.remove('print-fullpreview-prepare');
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+  fullPreviewMap.resize();
+  fitToFullExtent();
+  cleanupPageRule();
 }
 
 // ---------- visibilité / repaint ---------- //
@@ -472,6 +989,7 @@ function switchZoneset(n) {
 function buildZoneGrid() {
   const grid = document.getElementById('zone-grid');
   grid.innerHTML = '';
+  grid.classList.toggle('zone-grid--tribes', state.zoneset === '9');
   const cols = state.colors[state.zoneset];
   const lms  = state.data['l' + state.zoneset].features;
   state.data['z' + state.zoneset].features.forEach((f, i) => {
@@ -479,12 +997,13 @@ function buildZoneGrid() {
     const wrap = document.createElement('div');
     wrap.className = 'zone-cell';
     wrap.title = lm ? `${lm.properties.kind} : ${lm.properties.name}` : '';
+    const isTribe = state.zoneset === '9';
     wrap.innerHTML = `
-      <button class="zone-btn" style="--zone-color:${cols[i]}" data-idx="${i}" title="Zoomer sur la sous-zone ${i + 1}">
-        <span>${i + 1}</span>
+      <button class="zone-btn${isTribe ? ' zone-btn--tribe' : ''}" style="--zone-color:${cols[i]}" data-idx="${i}" title="Zoomer sur ${escapeHtml(zoneTitle(i))}">
+        <span>${escapeHtml(zoneLabel(i))}</span>
       </button>
       <input type="color" class="zone-color" value="${cols[i]}" data-idx="${i}" title="Changer la couleur" />
-      <button class="zone-info" data-idx="${i}" title="Détails de la sous-zone">i</button>
+      <button class="zone-info" data-idx="${i}" title="Détails de ${escapeHtml(zoneTitle(i))}">i</button>
     `;
     grid.appendChild(wrap);
   });
@@ -784,9 +1303,8 @@ async function exportSVG() {
   }
 
   const onlyZoneIdx2 = exportState.area === 'all' ? null : exportState.area;
-  const suffix = onlyZoneIdx2 === null ? `${state.zoneset}sz` : `sz${onlyZoneIdx2 + 1}`;
   const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
-  downloadBlob(blob, `zone5_${suffix}_${exportState.quality}.svg`);
+  downloadBlob(blob, `${exportFilename(onlyZoneIdx2)}.svg`);
   toast('SVG exporté ✓');
 }
 
@@ -875,10 +1393,13 @@ function buildExportAreaGrid() {
   const grid = document.getElementById('exp-area');
   const cols = state.colors[state.zoneset];
   const n = state.data['z' + state.zoneset].features.length;
+  const isTribe = state.zoneset === '9';
+  grid.classList.toggle('exp-area--tribes', isTribe);
   const buttons = [`<button type="button" class="exp-area__all${exportState.area === 'all' ? ' is-active' : ''}" data-area="all">Toute la carte</button>`];
   for (let i = 0; i < n; i++) {
     const active = exportState.area === i ? ' is-active' : '';
-    buttons.push(`<button type="button" class="exp-zone${active}" style="--zone-color:${cols[i]}" data-area="${i}">${i + 1}</button>`);
+    const cls = 'exp-zone' + (isTribe ? ' exp-zone--tribe' : '') + active;
+    buttons.push(`<button type="button" class="${cls}" style="--zone-color:${cols[i]}" data-area="${i}" title="${escapeHtml(zoneTitle(i))}">${escapeHtml(zoneLabel(i))}</button>`);
   }
   grid.innerHTML = buttons.join('');
   grid.querySelectorAll('[data-area]').forEach(b => {
@@ -911,8 +1432,8 @@ function setupExportDialog() {
 
 function updateExportInfo() {
   const target = exportState.area === 'all'
-    ? `Toute la zone 5 (${state.zoneset} sous-zones)`
-    : `Sous-zone ${exportState.area + 1} uniquement`;
+    ? `Tout Chicoutimi (${state.zoneset === '9' ? '9 tribus' : state.zoneset + ' sous-zones'})`
+    : `${zoneTitle(exportState.area)} uniquement`;
   const fmt = exportState.format.toUpperCase();
   const info = exportState.format === 'svg'
     ? `${target} — vectoriel, zoom infini.`
@@ -980,9 +1501,8 @@ async function exportRasterHighRes() {
     format: exportState.format,
   });
 
-  const suffix = onlyZoneIdx === null ? `${state.zoneset}sz` : `sz${onlyZoneIdx + 1}`;
   const ext = exportState.format === 'jpeg' ? 'jpg' : 'png';
-  downloadBlob(blob, `zone5_${suffix}_${exportState.quality}.${ext}`);
+  downloadBlob(blob, `${exportFilename(onlyZoneIdx)}.${ext}`);
   const w = Math.round(cssWidth * q.pixelRatio);
   const h = Math.round(cssHeight * q.pixelRatio);
   toast(`Image exportée — ${w}×${h} px ✓`);
@@ -1262,6 +1782,8 @@ function toast(msg, ms = 2400) {
     if (map.loaded()) ready(); else map.on('load', ready);
     setupUI();
     setupSearch();
+    setupTribePreview();
+    setupFullPreview();
   } catch (err) {
     console.error(err);
     toast('Erreur de chargement des données');

@@ -674,6 +674,29 @@ body.sidebar-collapsed .results { left: 16px; }
   outline-offset: 1px;
 }
 
+/* Mode tribus — grille d'export */
+.exp-area.exp-area--tribes {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.exp-zone.exp-zone--tribe {
+  height: auto;
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  word-break: break-word;
+  hyphens: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @keyframes modal-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes modal-pop {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
@@ -708,6 +731,76 @@ body.sidebar-collapsed .results { left: 16px; }
   border-color: var(--accent);
 }
 
+/* Étiquette de tribu (format 9 zones) : pill élégant et lisible */
+.zone-num-marker.zone-tribe-marker {
+  font-family: 'Inter', 'Helvetica Neue', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #0b1320;
+  background: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,247,250,0.96) 100%);
+  border-width: 2px;
+  border-style: solid;
+  border-radius: 999px;
+  height: auto;
+  min-width: 0;
+  padding: 6px 14px;
+  box-shadow:
+    0 1px 0 rgba(255,255,255,0.9) inset,
+    0 2px 4px rgba(0,0,0,0.18),
+    0 6px 16px rgba(0,0,0,0.22);
+  white-space: nowrap;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Variante tribu dans la grille latérale : pill large au lieu d'un cercle */
+.zone-btn.zone-btn--tribe {
+  width: 100%;
+  aspect-ratio: auto;
+  height: auto;
+  min-height: 34px;
+  border-radius: 14px;
+  padding: 6px 8px;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  word-break: break-word;
+  hyphens: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zone-btn.zone-btn--tribe span {
+  display: block;
+  max-width: 100%;
+}
+
+/* Disposition spécifique mode tribus : 3 colonnes, tout visible d'un coup */
+.zone-grid.zone-grid--tribes {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px 6px;
+}
+.zone-grid.zone-grid--tribes .zone-cell {
+  min-width: 0;
+}
+.zone-grid.zone-grid--tribes .zone-color {
+  width: 18px;
+  height: 18px;
+}
+.zone-grid.zone-grid--tribes .zone-info {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+  top: -4px;
+  right: -4px;
+}
+
 /* Étoile + nom du point stratégique */
 .lm-marker {
   display: flex;
@@ -737,6 +830,47 @@ body.sidebar-collapsed .results { left: 16px; }
   pointer-events: none;
 }
 
+/* Variante mode 9 tribus : marqueur combiné (étoile + nom tribu + quartier) */
+.lm-marker.lm-marker--tribe {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 2px solid var(--tribe-color, #11161d);
+  border-radius: 999px;
+  padding: 4px 12px 4px 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255,255,255,0.6) inset;
+  cursor: pointer;
+  filter: none;
+}
+.lm-marker.lm-marker--tribe .lm-tribe-star {
+  font-size: 18px;
+  color: #ffb703;
+  text-shadow: 0 0 2px #1a1a1a;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.lm-marker.lm-marker--tribe .lm-tribe-body {
+  line-height: 1.15;
+  text-align: left;
+}
+.lm-marker.lm-marker--tribe .lm-tribe-name {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #11161d;
+  white-space: nowrap;
+}
+.lm-marker.lm-marker--tribe .lm-tribe-quartier {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: #5b6573;
+  white-space: nowrap;
+}
+
 /* Étiquettes de rues (DOM) */
 .rue-label {
   background: rgba(255, 255, 255, 0.92);
@@ -753,10 +887,665 @@ body.sidebar-collapsed .results { left: 16px; }
 /* Bouton d'export pleine largeur */
 #exp-svg { width: 100%; }
 
-/* Mode impression */
+/* ============================ Aperçu plein écran d'une tribu ============================ */
+
+.tribe-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: #eef1f5;
+  display: flex;
+  flex-direction: column;
+  --tribe-color: #7c9cf3;
+}
+.tribe-preview[hidden] { display: none !important; }
+
+.tribe-preview__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e6ec;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+.tribe-preview__brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.tribe-preview__chip {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--tribe-color);
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.04), inset 0 0 0 2px rgba(255,255,255,0.85);
+}
+.tribe-preview__eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #7d8896;
+  margin: 0;
+  font-weight: 600;
+}
+.tribe-preview__title {
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: #11161d;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  margin: 2px 0 0;
+}
+.tribe-preview__actions {
+  display: flex;
+  gap: 10px;
+}
+.tribe-preview__actions .ghost-btn {
+  color: #11161d;
+  background: #ffffff;
+  border: 1px solid #d6dbe2;
+}
+.tribe-preview__actions .ghost-btn:hover {
+  border-color: var(--tribe-color);
+  background: #f6f8fb;
+}
+
+.tribe-preview__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* Feuille A3 paysage simulée à l'écran (1.414 ratio = 420/297) */
+.tribe-preview__sheet {
+  width: min(100%, 1700px);
+  aspect-ratio: 1.414 / 1;
+  background: #ffffff;
+  border-radius: 6px;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0,0,0,0.08);
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  overflow: hidden;
+  border: 1px solid #e2e6ec;
+  padding: 16px;
+  gap: 16px;
+}
+
+/* zone qui contient la carte clippée + le SVG d'outline non clippé */
+.tribe-preview__map-area {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.tribe-preview__map {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+.tribe-preview__map .maplibregl-canvas { outline: none; }
+.tribe-preview__map .maplibregl-canvas-container,
+.tribe-preview__map .maplibregl-map { background: transparent; }
+
+/* SVG d'outline — frère de la carte, non clippé */
+.tp-outline-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 2;
+  overflow: visible;
+}
+
+/* Légende */
+.tribe-preview__legend {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-left: 1px solid #ececec;
+  padding: 0 0 0 24px;
+  color: #11161d;
+  font-family: 'Inter', system-ui, sans-serif;
+  overflow: auto;
+}
+.tp-legend__header {
+  padding-bottom: 16px;
+  margin-bottom: 18px;
+  border-bottom: 3px solid;
+}
+.tp-legend__eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #7d8896;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+.tp-legend__name {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #11161d;
+  line-height: 1.05;
+  margin: 0;
+}
+.tp-legend__section { margin-bottom: 20px; }
+.tp-legend__h3 {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #5b6573;
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tp-legend__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #11161d;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.tp-legend__quartier {
+  font-size: 18px;
+  font-weight: 600;
+  color: #11161d;
+  margin: 0;
+}
+.tp-legend__streets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  columns: 2;
+  column-gap: 10px;
+}
+.tp-legend__streets li {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #2a313a;
+  padding: 2px 0;
+  border-bottom: 1px dotted #e6e9ed;
+  break-inside: avoid;
+}
+.tp-legend__empty {
+  font-size: 12px;
+  color: #8b949e;
+  font-style: italic;
+}
+.tp-legend__footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid #ececec;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #8b949e;
+}
+
+/* Étoile + nom du point stratégique (dans l'aperçu) */
+.tp-lm-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+.tp-lm-star {
+  font-size: 32px;
+  color: #ffb703;
+  text-shadow: 0 0 2px #1a1a1a, 0 0 2px #1a1a1a;
+  line-height: 1;
+}
+.tp-lm-label {
+  margin-top: 3px;
+  background: #ffffff;
+  color: #11161d;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.detail__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pré-impression : applique à l'écran un layout au ratio A1 paysage exact
+   pour que MapLibre rerende son canvas à la bonne taille avant window.print() */
+body.print-fullpreview-prepare {
+  overflow: hidden !important;
+}
+body.print-fullpreview-prepare > *:not(.full-preview) { visibility: hidden !important; }
+body.print-fullpreview-prepare .full-preview {
+  position: fixed !important;
+  inset: 0 !important;
+  background: #fff !important;
+  z-index: 9999 !important;
+}
+body.print-fullpreview-prepare .full-preview__header { display: none !important; }
+body.print-fullpreview-prepare .full-preview__body {
+  width: 100vw !important;
+  height: 100vh !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #333;
+}
+body.print-fullpreview-prepare .full-preview__sheet {
+  /* Ratio A1 paysage 841/594 = 1.4158 */
+  width: min(100vw, calc(100vh * 1.4158)) !important;
+  height: min(100vh, calc(100vw / 1.4158)) !important;
+  max-width: none !important;
+  aspect-ratio: 1.4158 / 1 !important;
+  display: grid !important;
+  grid-template-columns: 1fr 26.5% !important;  /* 220mm sur 829mm = 26.5% */
+  grid-template-rows: 1fr !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  box-shadow: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+}
+
+/* ============================ Aperçu A1 (toutes tribus) ============================ */
+
+.full-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: #eef1f5;
+  display: flex;
+  flex-direction: column;
+}
+.full-preview[hidden] { display: none !important; }
+
+.full-preview__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 22px;
+  background: #fff;
+  border-bottom: 1px solid #e2e6ec;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+.full-preview__eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #7d8896;
+  margin: 0;
+  font-weight: 600;
+}
+.full-preview__title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #11161d;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  margin: 2px 0 0;
+}
+.full-preview__actions { display: flex; gap: 10px; }
+.full-preview__actions .ghost-btn {
+  color: #11161d;
+  background: #fff;
+  border: 1px solid #d6dbe2;
+}
+.full-preview__actions .ghost-btn:hover {
+  border-color: #7c9cf3;
+  background: #f6f8fb;
+}
+.full-preview__body {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+/* Feuille A1 paysage simulée (1.414:1 = 841/594) */
+.full-preview__sheet {
+  width: min(100%, 1800px);
+  aspect-ratio: 1.414 / 1;
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0,0,0,0.08);
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  overflow: hidden;
+  border: 1px solid #e2e6ec;
+  padding: 16px;
+  gap: 16px;
+}
+
+.full-preview__map-area {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+.full-preview__map {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+}
+
+/* Marqueur combiné — étoile + nom de tribu + quartier */
+.fp-tribe-marker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 2px solid var(--tribe-color, #11161d);
+  border-radius: 999px;
+  padding: 4px 10px 4px 8px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255,255,255,0.6) inset;
+  font-family: 'Inter', system-ui, sans-serif;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.fp-tribe-marker__star {
+  font-size: 16px;
+  color: #ffb703;
+  text-shadow: 0 0 1px #1a1a1a;
+  line-height: 1;
+}
+.fp-tribe-marker__body { line-height: 1.1; }
+.fp-tribe-marker__name {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #11161d;
+}
+.fp-tribe-marker__quartier {
+  font-size: 9px;
+  font-weight: 500;
+  color: #5b6573;
+}
+
+/* Légende A1 : sections par tribu, multi-colonnes pour tout voir d'un coup */
+.full-preview__legend {
+  background: #fff;
+  border-left: 1px solid #ececec;
+  padding: 4px 0 4px 14px;
+  overflow: auto;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #11161d;
+  columns: 2;
+  column-gap: 14px;
+  column-rule: 1px solid #f0f0f0;
+}
+.fp-legend__section {
+  margin-bottom: 14px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tribe-color) 6%, transparent), transparent);
+  border-left: 4px solid var(--tribe-color);
+  padding: 6px 6px 6px 8px;
+  border-radius: 4px;
+}
+.fp-legend__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tribe-color) 30%, transparent);
+}
+.fp-legend__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--tribe-color);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--tribe-color);
+  flex-shrink: 0;
+}
+.fp-legend__name {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin: 0;
+  flex: 1;
+  color: #11161d;
+}
+.fp-legend__count {
+  font-size: 9px;
+  background: var(--tribe-color);
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.fp-legend__quartier {
+  font-size: 9.5px;
+  margin: 0 0 4px;
+  color: #2a313a;
+  line-height: 1.3;
+}
+.fp-legend__quartier em {
+  font-style: normal;
+  color: #7d8896;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.fp-legend__streets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.fp-legend__streets li {
+  font-size: 8.5px;
+  line-height: 1.3;
+  color: #2a313a;
+  padding: 0.5px 0;
+}
+
+/* ============================ Mode impression ============================ */
 @media print {
-  body { background: #fff; }
-  .sidebar, .sidebar-toggle, .results, .maplibregl-ctrl, #toast, .detail { display: none !important; }
-  #map { left: 0 !important; }
+  /* @page injecté dynamiquement par JS (triggerTribePrint / triggerFullPrint)
+     pour basculer entre A3 paysage (tribu) et A1 paysage (toutes tribus). */
+
+  html, body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body.has-tribe-preview > *:not(.tribe-preview) { display: none !important; }
+  body.has-full-preview > *:not(.full-preview) { display: none !important; }
+  body:not(.has-tribe-preview):not(.has-full-preview) > *:not(#map):not(.tribe-preview):not(.full-preview) { display: none !important; }
+
+  .tribe-preview {
+    position: static !important;
+    inset: auto !important;
+    background: #fff !important;
+    height: auto !important;
+    display: block !important;
+  }
+  .tribe-preview__header,
+  .tribe-preview .no-print { display: none !important; }
+  .tribe-preview__body {
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* Feuille = page A3 paysage entière, layout horizontal carte | légende */
+  .tribe-preview__sheet {
+    display: grid !important;
+    grid-template-columns: 1fr 65mm !important;
+    grid-template-rows: 1fr !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: calc(297mm - 12mm) !important;
+    aspect-ratio: auto !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    gap: 4mm !important;
+    page-break-inside: avoid;
+    overflow: hidden;
+  }
+
+  .tribe-preview__map-area {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Légende : tient sur une seule page, une seule colonne, font compact */
+  .tribe-preview__legend {
+    border-left: 1px solid #cfd4db !important;
+    padding: 0 0 0 6mm !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+  }
+  .tp-legend__header { padding-bottom: 8px !important; margin-bottom: 10px !important; }
+  .tp-legend__name { font-size: 18pt !important; }
+  .tp-legend__eyebrow { font-size: 7pt !important; }
+  .tp-legend__section { margin-bottom: 10px !important; }
+  .tp-legend__h3 { font-size: 8pt !important; margin-bottom: 4px !important; }
+  .tp-legend__quartier { font-size: 11pt !important; }
+  .tp-legend__streets {
+    columns: 2 !important;
+    column-gap: 3mm !important;
+    column-rule: 1px solid #ececec;
+    font-size: 6.5pt !important;
+    line-height: 1.25 !important;
+  }
+  .tp-legend__streets li {
+    padding: 1px 0 !important;
+    font-size: 6.5pt !important;
+    line-height: 1.25 !important;
+    border-bottom: 1px dotted #ececec !important;
+    break-inside: avoid !important;
+  }
+  .tp-legend__footer { font-size: 6pt !important; padding-top: 6px !important; }
+
+  /* Améliore la netteté du canvas (rendu haute densité grâce à pixelRatio: 2) */
+  .maplibregl-canvas { image-rendering: -webkit-optimize-contrast; }
+
+  /* Carte standard (cas où l'utilisateur imprime depuis la vue normale) */
+  body:not(.has-tribe-preview):not(.has-full-preview) .sidebar,
+  body:not(.has-tribe-preview):not(.has-full-preview) .sidebar-toggle,
+  body:not(.has-tribe-preview):not(.has-full-preview) .results,
+  body:not(.has-tribe-preview):not(.has-full-preview) .maplibregl-ctrl,
+  body:not(.has-tribe-preview):not(.has-full-preview) #toast,
+  body:not(.has-tribe-preview):not(.has-full-preview) .detail { display: none !important; }
+  body:not(.has-tribe-preview):not(.has-full-preview) #map { left: 0 !important; }
+}
+
+/* ============================ Mode impression A1 (toutes tribus) ============================ */
+@media print {
+  body.has-full-preview { background: #fff !important; }
+  body.has-full-preview > *:not(.full-preview) { display: none !important; }
+  .full-preview {
+    position: static !important;
+    inset: auto !important;
+    background: #fff !important;
+    height: auto !important;
+    display: block !important;
+  }
+  .full-preview__header,
+  .full-preview .no-print { display: none !important; }
+  .full-preview__body {
+    padding: 0 !important;
+    margin: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+  /* Force la grille à occuper toute la page A1 paysage via viewport units.
+     En mode print, 1vw = 1% de la largeur de la page (après marges). */
+  .full-preview, .full-preview__body {
+    width: 100% !important;
+    height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .full-preview__sheet {
+    display: grid !important;
+    grid-template-columns: 1fr 220mm !important;
+    grid-template-rows: 100vh !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    gap: 0 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    overflow: hidden !important;
+  }
+  /* Empêche le navigateur de paginer le contenu en dehors de la feuille */
+  .full-preview, .full-preview__body { page-break-after: avoid !important; page-break-before: avoid !important; }
+  .full-preview__map-area {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .full-preview__legend {
+    border-left: 1px solid #cfd4db !important;
+    padding: 0 0 0 6mm !important;
+    overflow: hidden !important;
+    columns: 3 !important;
+    column-gap: 4mm !important;
+    column-rule: 1px solid #ececec;
+    height: 100% !important;
+  }
+  .fp-legend__section {
+    margin-bottom: 6mm !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  .fp-legend__name { font-size: 11pt !important; }
+  .fp-legend__quartier { font-size: 8.5pt !important; }
+  .fp-legend__streets li { font-size: 7.5pt !important; line-height: 1.25 !important; padding: 0.6px 0 !important; }
+  .fp-legend__count { font-size: 7pt !important; }
 }
 
